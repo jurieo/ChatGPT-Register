@@ -77,6 +77,7 @@ config = get_configuration()
 headless_browser = config.get('headless_browser', True)
 account_postfix = config.get('account_postfix')
 client_key = config.get('client_key')
+yes_key = config.get('yes_key')
 pandora_next_website = config.get('pandora_next_website')
 site_password = config.get('site_password', '')
 IMAP_server = config.get('IMAP_server')
@@ -84,6 +85,11 @@ IMAP_port = config.get('IMAP_port', 993)
 email_username = config.get('email_username')
 email_password = config.get('email_password')
 email_folder = config.get('email_folder', 'Inbox')
+proxy = "http://houseworld-zone-resi-session-8013d26f81eb-sessTime-1:houseworld@4803e1a5f3e8e6a6.us.ip2world.vip:6001"
+proxies = {
+    'http': proxy, 
+    'https': proxy,
+}
 # puzzle_type = config.get('puzzle_type', 'train_coordinates')  # 有多种类型，可在 capsolver 网站查看
 
 if account_postfix and not account_postfix.startswith('@'):
@@ -96,6 +102,50 @@ if not all(
     exit(-1)
 # ------------------------------------------------------------------------------------
 
+# 创建任务
+def create_task(url, proxy):
+    data = {
+        # 填您自己的密钥
+        "clientKey": yes_key,
+        "task": {
+        "type": "CloudFlareTaskS2",
+        "websiteURL": url,
+        "proxy": proxy
+        }
+    }
+    url = "https://api.yescaptcha.com/createTask"
+    response = requests.post(url, json=data).json()
+    return response
+
+# 获取结果
+def get_task(task_id):
+  url = "http://api.yescaptcha.com/getTaskResult"
+  data = {
+      # 填您自己的密钥
+      "clientKey": yes_key,
+      "taskId": task_id
+  }
+  response = requests.post(url, json=data).json()
+  return response
+
+# 完整的请求
+def get_result(*args, **kwargs):
+  uuid = create_task(*args, **kwargs)
+  if not uuid or not uuid.get('taskId'):
+    return uuid
+  print("TaskID:", uuid)
+  for i in range(30):
+    time.sleep(3)
+    result = get_task(uuid.get('taskId'))
+    if result.get('status') == 'processing':
+        continue
+    elif result.get('status') == 'ready':
+        return result
+    else:
+        print("Fail:", result)
+
+
+#================================================================================================
 class Register:
 
     # site password
@@ -168,6 +218,9 @@ class Register:
         # options.add_extension(extension_directory)
         options.add_argument(f'--load-extension={extension_directory}')
         options.add_argument(f'--app={pandora_next_website}')
+        # options.add_argument(f"--proxy-server={proxy}")
+        # ua = "{'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.3'}"
+        # options.add_argument(f"user-agent={ua}")
 
         self.logger.info('Loading undetected Chrome')
 
@@ -1068,9 +1121,7 @@ def generate_random_birthday():
 
 
 if __name__ == '__main__':
-    # birthday = generate_random_birthday()
    
-
     # 模拟注册类
     register = Register(
         pandora_next_website=pandora_next_website,
@@ -1082,9 +1133,9 @@ if __name__ == '__main__':
     # 通过给定邮箱后缀生成账号密码
     email, password = register.generate_account_information(account_postfix)
 
-    # 输入邮箱并点击继续按钮
+    # # 输入邮箱并点击继续按钮
     register.input_email_continue(email)
-    # 输入密码并点击继续按钮
+    # # 输入密码并点击继续按钮
     register.input_password_continue(password)
 
     # 进行邮件监测
@@ -1122,6 +1173,40 @@ if __name__ == '__main__':
     # 结束邮件监测
     monitor.end_monitoring()
 
+
+    # task = get_result(link, proxy=proxy)
+    # if not task.get("solution"):
+    #     print("任务失败", task)
+    #     exit()
+        
+    # solution = task.get("solution")
+    # # headers = {
+    # #     'User-Agent': solution.get("user_agent")
+    # # }
+
+    # print("Ua", solution.get("user_agent"))
+    
+    # cookies = solution.get("cookies")
+    # print("Cookies", cookies)
+    # ua= solution.get("user_agent")
+    # register.browser.add_cookie(cookies)
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.3"
+    register.browser.options.add_argument(f"user-agent={ua}")
+    cookies_dict = {"PHPSESSID": "sgn8agalekrc2scq75p92rsrut", "cf_chl_3": "b3aad667e65ad59", "cf_clearance": "hwlQ8foNZVdX3.DeCwwQrLezOeA98AtEVGfsRI6pgQ0-1705935558-1-AZXGjpv/jNt63iZkeqwrkiZQ0yLy1VDA/JecREeYMDgrbfMNpixhZY95yeMhC8rliMvx6bOqXvUadXptHJy40wE=", "did": "s%3Av0%3Ad89a0890-b936-11ee-9dfc-03e05c3e86b2.ymPokCG%2BgzArMQz5ajIRy%2BKO7hFf2F5nm0aZRFiHC5c", "auth0": "s%3Av1.gadzZXNzaW9ugqZoYW5kbGXEQCH7i6uRdIuxu1e4rmVHHmzCQdiIzxSf4Lo2b4pNFnvLlxibPU4wP_EY7saQxAo5pSkD0gWGLQ4aiD7phNlvEw-mY29va2llg6dleHBpcmVz1__V3IkAZbJ3Uq5vcmlnaW5hbE1heEFnZc4PcxQAqHNhbWVTaXRlpG5vbmU.WYqFfG5FsqepMq%2FyZWU%2BMZiV3sJczy7gSd%2Bj8Vk2NVg", "did_compat": "s%3Av0%3Ad89a0890-b936-11ee-9dfc-03e05c3e86b2.ymPokCG%2BgzArMQz5ajIRy%2BKO7hFf2F5nm0aZRFiHC5c", "auth0_compat": "s%3Av1.gadzZXNzaW9ugqZoYW5kbGXEQCH7i6uRdIuxu1e4rmVHHmzCQdiIzxSf4Lo2b4pNFnvLlxibPU4wP_EY7saQxAo5pSkD0gWGLQ4aiD7phNlvEw-mY29va2llg6dleHBpcmVz1__V3IkAZbJ3Uq5vcmlnaW5hbE1heEFnZc4PcxQAqHNhbWVTaXRlpG5vbmU.WYqFfG5FsqepMq%2FyZWU%2BMZiV3sJczy7gSd%2Bj8Vk2NVg", "__cf_bm": "rcCVYDGkV6gM4FKdlxC15kHjYq8fVHfvZC459AvrWcw-1705935570-1-Aeye8ovlRcslifEfB8Bdc95sQI1/q+0lEcerK2btqkhCZiyWH+/0UGyFTlS7QpLE69qQnk3RCIBRky0vezZ/eCY=", "_cfuvid": "dtZ4rG01Uga91tCtRnC74eF6Ec9myH.YmJRSgVA6VMI-1705935570957-0-604800000"}
+    for name, value in cookies_dict.items():
+        cookie = {'name': name, 'value': value}
+        register.browser.add_cookie(cookie)
+
+
+    # register.browser.get('https://mandrillapp.com/track/click')
+
+
+    # register.browser.add_cookie(cookies)
+    print("添加了cookie")
+
+    register.browser.options.add_argument(f"--proxy-server={proxy}")
+    time.sleep(5)
+    # link = "https://mandrillapp.com/track/click/31165340/auth0.openai.com?p=eyJzIjoiOUxrWEJaQW96Mjg3ZnFZS0NWdGtLSGVLQXlFIiwidiI6MSwicCI6IntcInVcIjozMTE2NTM0MCxcInZcIjoxLFwidXJsXCI6XCJodHRwczpcXFwvXFxcL2F1dGgwLm9wZW5haS5jb21cXFwvdVxcXC9lbWFpbC12ZXJpZmljYXRpb24_dGlja2V0PUZtYzJLOEx6MGxsekxwUWpmZUtSSGVkbWdxYVl0N2dPI1wiLFwiaWRcIjpcIjgzMGUwNjM1YjY5ZTQ0MDg5ZDM3NWVjZGM5MTVlNDA1XCIsXCJ1cmxfaWRzXCI6W1wiMWM3OTUyMjNiMmQ0YmUwMjBmZDJhNTBmMmM5YzQxZjEwMThlNDU0Y1wiXX0ifQ"
     # 访问一个网址
     register.browser.get(link)
 
