@@ -261,7 +261,9 @@ class Register:
                 and self.check_account_exists(email):
             self.logger.warning(f'Generated repeated email{email}. Regenerating...')
 
-        password = ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(16))
+        # password = ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(16))
+
+        password = 'Rteshe476E9yuTy'
 
         self.logger.info(f'Generated account: email({email}), password({password})')
         return email, password
@@ -429,6 +431,9 @@ class Register:
         """创建新账号，如果账号已存在则抛出异常"""
         if self.check_account_exists(email):
             raise Exception("账号已存在")
+        
+        file = open("account.txt", "a")
+        file.write(f"{email}---{password}\n")
 
         new_account = Account(email=email, password=password, is_active=1)
 
@@ -1021,68 +1026,70 @@ if __name__ == '__main__':
     # 跳过 site_password
     register.pass_site_password(site_password)
 
-    # 点击注册按钮
-    register.click_signup_link()
+    while True:
 
-    # 通过给定邮箱后缀生成账号密码
-    email, password = register.generate_account_information(account_postfix)
+        # 点击注册按钮
+        register.click_signup_link()
 
-    # 输入注册需要的账号密码
-    register.input_email_and_password(email, password)
+        # 通过给定邮箱后缀生成账号密码
+        email, password = register.generate_account_information(account_postfix)
 
-    # 进行邮件监测
-    monitor = EmailMonitor(
-        server=IMAP_server,
-        port=IMAP_port,
-        username=email_username,
-        password=email_password,
-        folder=email_folder,
-        specified_sender='noreply@tm.openai.com',
-        specified_receiver=email
-    )
-    # start to monitor mails
-    monitor.start_monitoring()
+        # 输入注册需要的账号密码
+        register.input_email_and_password(email, password)
 
-    count = 0
-    while (link := monitor.get_link(email)) is None and count < 15:
-        count += 1
-        log.info(f'账号[{email}]认证链接仍不存在，等待中...({count})')
-        time.sleep(3)
+        # 进行邮件监测
+        monitor = EmailMonitor(
+            server=IMAP_server,
+            port=IMAP_port,
+            username=email_username,
+            password=email_password,
+            folder=email_folder,
+            specified_sender='noreply@tm.openai.com',
+            specified_receiver=email
+        )
+        # start to monitor mails
+        monitor.start_monitoring()
 
-    if link:
-        log.info(f'已获取到账号[{email}]的认证链接！')
-    else:
-        log.critical(f'邮箱获取失败！')
-        exit(-1)
+        count = 0
+        while (link := monitor.get_link(email)) is None and count < 15:
+            count += 1
+            log.info(f'账号[{email}]认证链接仍不存在，等待中...({count})')
+            time.sleep(3)
 
-    # 结束邮件监测
-    monitor.end_monitoring()
+        if link:
+            log.info(f'已获取到账号[{email}]的认证链接！')
+        else:
+            log.critical(f'邮箱获取失败！')
+            exit(-1)
 
-    # 填写认证链接
-    register.input_verify_link(link)
+        # 结束邮件监测
+        monitor.end_monitoring()
 
-    # 设置账号用户名
-    register.input_username(email.split('@')[0])
+        # 填写认证链接
+        register.input_verify_link(link)
 
-    # 等待 puzzle 出现并解决
-    register.wait_for_puzzle()
+        # 设置账号用户名
+        register.input_username(email.split('@')[0])
 
-    # 在数据库中创建账号密码
-    register.create_account(email, password)
+        # 等待 puzzle 出现并解决
+        register.wait_for_puzzle()
+
+        # 在数据库中创建账号密码
+        register.create_account(email, password)
 
     # 登录测试
-    register.login(email, password)
+    # register.login(email, password)
 
-    # 跳过引导
-    register.pass_tutorial()
+    # # 跳过引导
+    # register.pass_tutorial()
 
-    # 发送问题
-    register.interact('Hello! How are you?')
+    # # 发送问题
+    # register.interact('Hello! How are you?')
 
-    # 等待生成
-    time.sleep(10)
+    # # 等待生成
+    # time.sleep(10)
 
     # 关闭
-    register.browser.close()
-    register.browser.quit()
+    # register.browser.close()
+    # register.browser.quit()
 

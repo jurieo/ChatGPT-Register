@@ -1,4 +1,3 @@
-
 # 是否使用 headless 模式(Docker 中应该开启，本地可以关闭测试)
 headless_browser: true
 
@@ -7,10 +6,12 @@ account_postfix: ""
 
 # Capsolver 的 client_key
 client_key: ""
+yes_key: ""
 
 # PandoraNext 的镜像站网址
 # 若没有可以使用 https://chat.oaifree.com (该网站已加入CF验证，请部署自己的pandora镜像站！)
 pandora_next_website: ""
+oopenai_signup_website: "https://platform.openai.com/signup"
 
 # PandoraNext 镜像站的 site_password，如果没有可留空
 site_password: ""
@@ -30,7 +31,6 @@ email_folder: "Inbox"
 # 不定期会改变，可以到 Capsovler 网站查看对应类型
 # puzzle_type: "train_coordinates"  # 由于使用了 CapSolver 的浏览器插件自动判断类型，本项已不再需要
 
-
 # For refresher_tokens_cli.py
 
 # ninja 的 baseURL，e.g. http://localhost:7999
@@ -42,4 +42,3 @@ pandora_next_base_url: ""
 
 # 要更新的 pool_token，留空则为新生成一个 pool_token
 pandora_next_pool_token: ""
-
