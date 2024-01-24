@@ -62,101 +62,117 @@ logging.basicConfig(
     level="INFO",  # 设置日志级别
     format="%(message)s",  # 设置日志格式
     datefmt="%Y/%m/%d %H:%M:%S",  # 设置时间格式
-    handlers=[RichHandler(console=console, rich_tracebacks=True, markup=True, show_path=False)]  # 使用RichHandler
+    handlers=[
+        RichHandler(console=console, rich_tracebacks=True, markup=True, show_path=False)
+    ],  # 使用RichHandler
 )
 log = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------------------------
 # 初始化数据库（创建表）
-DB_Session = get_session_maker('sqlite:///account.db')
+DB_Session = get_session_maker("sqlite:///account.db")
 
 # ------------------------------------------------------------------------------------
 # 从配置字典中获取值
 config = get_configuration()
 
-headless_browser = config.get('headless_browser', True)
-account_postfix = config.get('account_postfix')
-client_key = config.get('client_key')
-yes_key = config.get('yes_key')
-pandora_next_website = config.get('pandora_next_website')
-site_password = config.get('site_password', '')
-IMAP_server = config.get('IMAP_server')
-IMAP_port = config.get('IMAP_port', 993)
-email_username = config.get('email_username')
-email_password = config.get('email_password')
-email_folder = config.get('email_folder', 'Inbox')
-proxy = "http://houseworld-zone-resi-session-8013d26f81eb-sessTime-1:houseworld@4803e1a5f3e8e6a6.us.ip2world.vip:6001"
+headless_browser = config.get("headless_browser", True)
+account_postfix = config.get("account_postfix")
+client_key = config.get("client_key")
+yes_key = config.get("yes_key")
+oopenai_signup_website = "https://platform.openai.com/signup"
+oopenai_sigin_website = "https://platform.openai.com/login?launch"
+site_password = config.get("site_password", "")
+IMAP_server = config.get("IMAP_server")
+IMAP_port = config.get("IMAP_port", 993)
+email_username = config.get("email_username")
+email_password = config.get("email_password")
+email_folder = config.get("email_folder", "Inbox")
+proxy = config.get("proxy")
 proxies = {
-    'http': proxy, 
-    'https': proxy,
+    "http": proxy,
+    "https": proxy,
 }
 # puzzle_type = config.get('puzzle_type', 'train_coordinates')  # 有多种类型，可在 capsolver 网站查看
 
-if account_postfix and not account_postfix.startswith('@'):
-    account_postfix = '@' + account_postfix
+if account_postfix and not account_postfix.startswith("@"):
+    account_postfix = "@" + account_postfix
 
 # 检查配置
 if not all(
-        [account_postfix, client_key, pandora_next_website, IMAP_server, email_username, email_password, email_folder]):
-    log.critical('Please review your environment variable configurations!')
+    [
+        account_postfix,
+        client_key,
+        oopenai_signup_website,
+        IMAP_server,
+        email_username,
+        email_password,
+        email_folder,
+    ]
+):
+    log.critical("Please review your environment variable configurations!")
     exit(-1)
 # ------------------------------------------------------------------------------------
+
 
 # 创建任务
 def create_task(url, proxy):
     data = {
         # 填您自己的密钥
         "clientKey": yes_key,
-        "task": {
-        "type": "CloudFlareTaskS2",
-        "websiteURL": url,
-        "proxy": proxy
-        }
+        "task": {"type": "CloudFlareTaskS2", "websiteURL": url, "proxy": proxy},
     }
     url = "https://api.yescaptcha.com/createTask"
     response = requests.post(url, json=data).json()
     return response
 
+
 # 获取结果
 def get_task(task_id):
-  url = "http://api.yescaptcha.com/getTaskResult"
-  data = {
-      # 填您自己的密钥
-      "clientKey": yes_key,
-      "taskId": task_id
-  }
-  response = requests.post(url, json=data).json()
-  return response
+    url = "http://api.yescaptcha.com/getTaskResult"
+    data = {
+        # 填您自己的密钥
+        "clientKey": yes_key,
+        "taskId": task_id,
+    }
+    response = requests.post(url, json=data).json()
+    return response
+
 
 # 完整的请求
 def get_result(*args, **kwargs):
-  uuid = create_task(*args, **kwargs)
-  if not uuid or not uuid.get('taskId'):
-    return uuid
-  print("TaskID:", uuid)
-  for i in range(30):
-    time.sleep(3)
-    result = get_task(uuid.get('taskId'))
-    if result.get('status') == 'processing':
-        continue
-    elif result.get('status') == 'ready':
-        return result
-    else:
-        print("Fail:", result)
+    uuid = create_task(*args, **kwargs)
+    if not uuid or not uuid.get("taskId"):
+        return uuid
+    print("TaskID:", uuid)
+    for i in range(30):
+        time.sleep(3)
+        result = get_task(uuid.get("taskId"))
+        if result.get("status") == "processing":
+            continue
+        elif result.get("status") == "ready":
+            return result
+        else:
+            print("Fail:", result)
 
 
-#================================================================================================
+# ================================================================================================
 class Register:
-
     # site password
-    xpath_site_password = "//label[text()='Password']/following-sibling::input[@id='password']"
-    xpath_site_password_submit = "//button[@type='submit' and @name='action' and text()='Continue']"
+    xpath_site_password = (
+        "//label[text()='Password']/following-sibling::input[@id='password']"
+    )
+    xpath_site_password_submit = (
+        "//button[@type='submit' and @name='action' and text()='Continue']"
+    )
     xpath_sign_up_link = "//a[@href='/auth/signup' and text()='Sign up']"
 
     # 输入生成的账号与密码
     xpath_account_email = "//input[@id='username' and @name='username' and preceding-sibling::label[text()='Email address']]"
     xpath_account_password = "//input[@id='password' and @name='password' and preceding-sibling::label[text()='Password']]"
-    xpath_account_info_submit = "//button[@type='submit' and @name='action' and text()='Continue']"
+    xpath_account_info_submit = (
+        "//button[@type='submit' and @name='action' and text()='Continue']"
+    )
 
     # 认证过程
     xpath_verify_button = "//button[@id='submit-token' and @type='submit']"
@@ -165,7 +181,9 @@ class Register:
 
     # 注册时用户名
     # xpath_signup_username_input = "//input[@name='username' and @id='username']"
-    xpath_signup_username_submit = "//button[@type='submit' and @name='action' and text()='Continue']"
+    xpath_signup_username_submit = (
+        "//button[@type='submit' and @name='action' and text()='Continue']"
+    )
 
     # 注册成功
     xpath_sign_up_successful = "//h1[text()='Signup successful']"
@@ -174,7 +192,9 @@ class Register:
     # 登录环节
     xpath_login_email_input = "//input[@id='username']"
     xpath_login_password_input = "//input[@id='password']"
-    xpath_login_submit = "//button[@type='submit' and @name='action' and text()='Continue']"
+    xpath_login_submit = (
+        "//button[@type='submit' and @name='action' and text()='Continue']"
+    )
 
     # 起始页面引导
     xpath_ok_lets_go = "//div[text()='Okay, let’s go']"
@@ -186,20 +206,23 @@ class Register:
 
     # jurieo 新增 注册页面，继续
     xpath_signup_email_input = "//input[@name='email' and @id='email']"
+    # xpath_login_email_input = "//input[@id='username' and @name='username']"
 
-    xpath_continue_button = "//button[@type='submit' and @name='action' and text()='继续']"
+    xpath_continue_button = (
+        "//button[@type='submit' and @name='action' and text()='继续']"
+    )
 
     xpath_signup_password_input = "//input[@name='password' and @id='password']"
+
+    xpath_login_continue_button = (
+        "//button[@type='submit' and @name='action' and text()='Continue']"
+    )
 
     xpath_fullname_input = "//input[@type='text' and @placeholder='Full name']"
     xpath_birthday_input = "//input[@type='text' @placeholder='Birthday']"
     xpath_agree_button = "//button[@type='submit' and @tabindex='0']"
 
-
-
-
-    def __init__(self, pandora_next_website, client_key, headless=False):
-
+    def __init__(self, oopenai_signup_website, client_key, headless=False):
         self.logger = logging.getLogger(self.__class__.__name__)
 
         # chrome启动参数
@@ -207,35 +230,38 @@ class Register:
 
         # options.add_argument('--incognito')
         # options.add_argument(f'--user-data-dir=./chatgpt_register')
-        extension_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'CapSolver.Browser.Extension-chrome')
-        extension_config_path = os.path.join(extension_directory, 'assets', 'config.js')
+        extension_directory = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "CapSolver.Browser.Extension-chrome",
+        )
+        extension_config_path = os.path.join(extension_directory, "assets", "config.js")
 
         # self.logger.info(f'Extension directory: {extension_directory}')
-        self.logger.info(f'Extension config path: [dim]{extension_config_path}[/dim]')
+        self.logger.info(f"Extension config path: [dim]{extension_config_path}[/dim]")
 
         self.replace_api_key(extension_config_path, client_key)
 
         # options.add_extension(extension_directory)
-        options.add_argument(f'--load-extension={extension_directory}')
-        options.add_argument(f'--app={pandora_next_website}')
+        options.add_argument(f"--load-extension={extension_directory}")
+        options.add_argument(f"--app={oopenai_signup_website}")
         # options.add_argument(f"--proxy-server={proxy}")
         # ua = "{'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.3'}"
         # options.add_argument(f"user-agent={ua}")
 
-        self.logger.info('Loading undetected Chrome')
+        self.logger.info("Loading undetected Chrome")
 
         # 检查是否已有 Patcher
         patched_driver = uc.Patcher().executable_path
 
         if not os.path.exists(patched_driver):
-            self.logger.warning('No patched driver found!')
+            self.logger.warning("No patched driver found!")
             patched_driver = None
 
         self.browser = uc.Chrome(
             # 如果不指定 executable_path 的位置，那么就会重复进行 Patch
             driver_executable_path=patched_driver,
             options=options,
-            headless=headless
+            headless=headless,
         )
         self.browser.set_page_load_timeout(120)
 
@@ -251,39 +277,44 @@ class Register:
         self.helper = SeleniumDriverHelper(self.browser)
         self.solver = FunCaptchaSolver(client_key, self.browser)
 
-        self.logger.info('Loaded Undetected chrome')
-        self.logger.info('Ready!')
+        self.logger.info("Loaded Undetected chrome")
+        self.logger.info("Ready!")
 
     def replace_api_key(self, config_path, new_api_key):
-
         # 在程序运行目录创建锁文件
         lock_path = os.path.abspath(".file_lock")
-    
+
         # 创建一个文件锁
         lock = FileLock(lock_path, timeout=1)
-    
+
         try:
             with lock:
-                with open(config_path, 'r', encoding='utf-8') as file:
+                with open(config_path, "r", encoding="utf-8") as file:
                     content = file.read()
-    
+
                 current_api_key_match = re.search(r"apiKey:\s*'(.+?)',", content)
                 if current_api_key_match:
                     current_api_key = current_api_key_match.group(1)
                     if current_api_key != new_api_key:
-                        new_content = re.sub(r"apiKey:\s*'.+?',", f"apiKey: '{new_api_key}',", content)
-                        with open(config_path, 'w', encoding='utf-8') as file:
+                        new_content = re.sub(
+                            r"apiKey:\s*'.+?',", f"apiKey: '{new_api_key}',", content
+                        )
+                        with open(config_path, "w", encoding="utf-8") as file:
                             file.write(new_content)
-    
+
                         self.logger.info("API key has been successfully replaced.")
                     else:
-                        self.logger.info("The new API key is the same as the current one. No replacement made.")
+                        self.logger.info(
+                            "The new API key is the same as the current one. No replacement made."
+                        )
                 else:
                     self.logger.error("No existing API key found in the file.")
-    
+
         except Timeout:
             # 如果锁被其他进程占用，则记录警告信息
-            self.logger.warning("Lock acquisition failed. Another instance might be modifying the file.")
+            self.logger.warning(
+                "Lock acquisition failed. Another instance might be modifying the file."
+            )
             # 直接pass，不进行后续操作
             pass
         except FileNotFoundError:
@@ -294,74 +325,127 @@ class Register:
             raise
 
     def pass_site_password(self, site_password):
-        self.logger.info('Checking if site password exists...')
+        self.logger.info("Checking if site password exists...")
 
-        site_password_input = self.helper.find_or_fail(By.XPATH, self.xpath_site_password, fail_ok=True)
+        site_password_input = self.helper.find_or_fail(
+            By.XPATH, self.xpath_site_password, fail_ok=True
+        )
         if site_password_input is None:
-            self.logger.info('Site password does not exist. Passed.')
+            self.logger.info("Site password does not exist. Passed.")
             return
 
-        self.logger.info('Site password exists. Inputting password...')
+        self.logger.info("Site password exists. Inputting password...")
 
         site_password_input.send_keys(site_password)
 
-        self.logger.info('Looking for continue button to click...')
+        self.logger.info("Looking for continue button to click...")
 
-        continue_button = self.helper.find_or_fail(By.XPATH, self.xpath_site_password_submit)
+        continue_button = self.helper.find_or_fail(
+            By.XPATH, self.xpath_site_password_submit
+        )
         continue_button.click()
 
-        self.logger.info('Password Submitted.')
+        self.logger.info("Password Submitted.")
 
     def click_continue_link(self):
-        self.logger.info('准备点击继续...')
+        self.logger.info("准备点击继续...")
 
-        signup_link = self.helper.sleepy_find_element(By.XPATH, self.xpath_continue_button)
+        signup_link = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_continue_button
+        )
         signup_link.click()
 
-        self.logger.info('已点击继续.')
+        self.logger.info("已点击继续.")
 
     def generate_account_information(self, email_postfix):
-
         # 生成不重复的账号与密码
-        while (email := petname.generate(words=2, separator='_', letters=10) + email_postfix) \
-                and self.check_account_exists(email):
-            self.logger.warning(f'Generated repeated email{email}. Regenerating...')
+        while (
+            email := petname.generate(words=2, separator="_", letters=10)
+            + email_postfix
+        ) and self.check_account_exists(email):
+            self.logger.warning(f"Generated repeated email{email}. Regenerating...")
 
         # password = ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(16))
-        password = 'Rteshe476E9yuTy'
+        password = "Rteshe476E9yuTy"
 
-        self.logger.info(f'Generated account: email({email}), password({password})')
+        self.logger.info(f"Generated account: email({email}), password({password})")
         return email, password
 
     def input_email_continue(self, email):
-        self.logger.info('等待输入邮箱')
+        self.logger.info("等待输入邮箱")
 
-        email_input = self.helper.sleepy_find_element(By.XPATH, self.xpath_signup_email_input)
+        email_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_signup_email_input
+        )
         email_input.send_keys(email)
 
         continue_button = self.helper.find_or_fail(By.XPATH, self.xpath_continue_button)
         continue_button.click()
 
-        self.logger.info('已点击继续')
+        self.logger.info("已点击继续")
 
     def input_password_continue(self, password):
-        self.logger.info('等待输入密码')
+        self.logger.info("等待输入密码")
 
-        email_input = self.helper.sleepy_find_element(By.XPATH, self.xpath_signup_password_input)
-        email_input.send_keys(password)
+        password_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_signup_password_input
+        )
+        password_input.send_keys(password)
+
+        self.logger.info("已经输入密码")
+
+        time.sleep(5)
 
         continue_button = self.helper.find_or_fail(By.XPATH, self.xpath_continue_button)
         continue_button.click()
 
-        self.logger.info('已点击继续')
+        self.logger.info("已点击继续")
 
-    def input_name_birthday_continue(self,username):
+    def input_username_continue(self, email):
+        self.logger.info("等待输入用户名")
 
-        self.logger.info('等待输入名字和生日')
+        email_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_login_email_input
+        )
+        email_input.send_keys(email)
+
+        continue_button = self.helper.find_or_fail(By.XPATH, self.xpath_continue_button)
+        continue_button.click()
+
+        self.logger.info("已点击继续")
+
+    def input_password_continue2(self, password):
+        self.logger.info("等待输入密码")
+
+        password_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_signup_password_input
+        )
+        password_input.send_keys(password)
+
+        self.logger.info("已经输入密码")
+
+        time.sleep(200)
+
+        # self.click_continue_link()
+
+        continue_button = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_login_continue_button
+        )
+        self.logger.info("准备点击继续")
+        continue_button.click()
+
+        self.logger.info("已点击继续")
+
+    def input_name_birthday_continue(self, username):
+        self.logger.info("等待输入名字和生日")
         birthday = generate_random_birthday()
 
-        name_input = self.helper.sleepy_find_element(By.XPATH, self.xpath_fullname_input)
-        birthday_input = self.helper.sleepy_find_element(By.XPATH, self.xpath_birthday_input)
+        name_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_fullname_input
+        )
+        birthday_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_birthday_input
+        )
 
         name_input.send_keys(username)
         birthday_input.send_keys(birthday)
@@ -370,118 +454,145 @@ class Register:
         continue_button = self.helper.find_or_fail(By.XPATH, self.xpath_agree_button)
         continue_button.click()
 
-        self.logger.info('已点击同意')
+        self.logger.info("已点击同意")
 
     def input_email_and_password(self, email, password):
-        self.logger.info('Waiting for email and password input appears...')
+        self.logger.info("Waiting for email and password input appears...")
 
-        email_input = self.helper.sleepy_find_element(By.XPATH, self.xpath_account_email)
-        password_input = self.helper.sleepy_find_element(By.XPATH, self.xpath_account_password)
+        email_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_account_email
+        )
+        password_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_account_password
+        )
 
-        self.logger.info('Inputting email and password...')
+        self.logger.info("Inputting email and password...")
 
         email_input.send_keys(email)
         password_input.send_keys(password)
 
-        self.logger.info('Looking for continue button to click...')
+        self.logger.info("Looking for continue button to click...")
 
-        continue_button = self.helper.find_or_fail(By.XPATH, self.xpath_account_info_submit)
+        continue_button = self.helper.find_or_fail(
+            By.XPATH, self.xpath_account_info_submit
+        )
         continue_button.click()
 
-        self.logger.info('Account information submitted.')
+        self.logger.info("Account information submitted.")
 
     def input_verify_link(self, verify_link):
-        self.logger.info('Waiting for verify button appears...')
+        self.logger.info("Waiting for verify button appears...")
 
-        verify_button = self.helper.sleepy_find_element(By.XPATH, self.xpath_verify_button)
+        verify_button = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_verify_button
+        )
         verify_button.click()
 
-        self.logger.info('Waiting for link textarea appears...')
+        self.logger.info("Waiting for link textarea appears...")
 
-        link_textarea = self.helper.sleepy_find_element(By.XPATH, self.xpath_verify_link_textarea)
+        link_textarea = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_verify_link_textarea
+        )
 
-        self.logger.info('Inputting verify link...')
+        self.logger.info("Inputting verify link...")
 
         link_textarea.send_keys(verify_link)
 
-        self.logger.info('Looking for OK button to click...')
+        self.logger.info("Looking for OK button to click...")
 
         submit_button = self.helper.find_or_fail(By.XPATH, self.xpath_verify_submit)
         submit_button.click()
 
-        self.logger.info('Verify link submitted.')
+        self.logger.info("Verify link submitted.")
 
     def wait_for_puzzle(self, question_type: str = None):
+        self.logger.info("Waiting for puzzle to be solved...")
 
-        self.logger.info('Waiting for puzzle to be solved...')
-
-        #self.solver.solve(question_type)
+        # self.solver.solve(question_type)
 
         try:
-            self.helper.wait_until_appear(By.XPATH, self.xpath_sign_up_successful, timeout_duration=120)
+            self.helper.wait_until_appear(
+                By.XPATH, self.xpath_sign_up_successful, timeout_duration=120
+            )
         except Exceptions.TimeoutException as e:
-            self.logger.error('[bold red]Solve failed within 120s! Please check if you have enough balance.[/bold red]')
+            self.logger.error(
+                "[bold red]Solve failed within 120s! Please check if you have enough balance.[/bold red]"
+            )
             raise
 
-        self.logger.info('Puzzle solved!')
-        self.logger.info('Looking for login link to click...')
+        self.logger.info("Puzzle solved!")
+        self.logger.info("Looking for login link to click...")
 
         login_button = self.helper.find_or_fail(By.XPATH, self.xpath_go_login)
         login_button.click()
 
-        self.logger.info('Login button clicked.')
+        self.logger.info("Login button clicked.")
 
     def input_username(self, username):
-        self.logger.info('Waiting for username input appears...')
+        self.logger.info("Waiting for username input appears...")
 
-        username_input = self.helper.sleepy_find_element(By.XPATH, self.xpath_signup_username_input)
+        username_input = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_signup_username_input
+        )
 
-        self.logger.info('Inputting username...')
+        self.logger.info("Inputting username...")
 
         username_input.send_keys(username)
 
-        self.logger.info('Looking for continue button to click...')
+        self.logger.info("Looking for continue button to click...")
 
-        continue_button = self.helper.find_or_fail(By.XPATH, self.xpath_signup_username_submit)
+        continue_button = self.helper.find_or_fail(
+            By.XPATH, self.xpath_signup_username_submit
+        )
         continue_button.click()
 
-        self.logger.info('Username submitted.')
+        self.logger.info("Username submitted.")
 
     def login(self, username: str, password: str):
-        self.logger.info('Waiting for email input appears...')
+        self.logger.info("Waiting for email input appears...")
 
         self.helper.wait_until_appear(By.XPATH, self.xpath_login_email_input)
 
         # Find email textbox, enter e-mail
-        email_box = self.helper.sleepy_find_element(By.XPATH, self.xpath_login_email_input)
+        email_box = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_login_email_input
+        )
         email_box.send_keys(username)
-        self.logger.info('Filled email box')
+        self.logger.info("Filled email box")
 
         # Click continue
-        continue_button = self.helper.sleepy_find_element(By.XPATH, self.xpath_login_submit)
+        continue_button = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_login_submit
+        )
         continue_button.click()
-        self.logger.info('Clicked continue button')
+        self.logger.info("Clicked continue button")
 
         # Find password textbox, enter password
-        pass_box = self.helper.sleepy_find_element(By.XPATH, self.xpath_login_password_input)
+        pass_box = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_login_password_input
+        )
         pass_box.send_keys(password)
-        self.logger.info('Filled password box')
+        self.logger.info("Filled password box")
 
         # Click continue
         time.sleep(0.5)
-        continue_button = self.helper.sleepy_find_element(By.XPATH, self.xpath_login_submit)
+        continue_button = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_login_submit
+        )
         continue_button.click()
-        self.logger.info('Logged in')
+        self.logger.info("Logged in")
 
         # 等待进入界面
-        self.logger.info('Waiting for prompt textarea appears...')
+        self.logger.info("Waiting for prompt textarea appears...")
         self.helper.wait_until_appear(By.XPATH, self.xpath_prompt_textarea)
 
     def pass_tutorial(self):
-        self.logger.info('Passing tutorial...')
+        self.logger.info("Passing tutorial...")
 
         # 跳过引导（如果有的话）
-        ok_lets_go = self.helper.sleepy_find_element(By.XPATH, self.xpath_ok_lets_go, attempt_count=3, fail_ok=True)
+        ok_lets_go = self.helper.sleepy_find_element(
+            By.XPATH, self.xpath_ok_lets_go, attempt_count=3, fail_ok=True
+        )
         if ok_lets_go:
             ok_lets_go.click()
             self.logger.info('Passed "Okay, let\'s go".')
@@ -493,25 +604,36 @@ class Register:
         # self.logger.info('Passed "Get started".')
 
     def interact(self, prompt):
-
         text_area = self.helper.find_or_fail(By.XPATH, self.xpath_prompt_textarea)
 
         # 使用 JavaScript 直接设置 textarea 的值
-        self.logger.info('Sending message...')
-        self.logger.info('Step.1 Click textarea.')
-        text_area.click(); time.sleep(1.5);  # noqa
-        self.logger.info('Step.2 Focus on textarea.')
-        self.browser.execute_script("arguments[0].focus();", text_area, prompt); time.sleep(1);  # noqa
-        self.logger.info('Step.3 Fill in textarea.')
-        self.browser.execute_script("arguments[0].value = arguments[1];", text_area, prompt); time.sleep(1.5);  # noqa
-        self.logger.info('Step.4 Add an additional ENTER.')
-        text_area.send_keys(Keys.SHIFT + Keys.ENTER); time.sleep(1.5);  # noqa
+        self.logger.info("Sending message...")
+        self.logger.info("Step.1 Click textarea.")
+        text_area.click()
+        time.sleep(1.5)
+        # noqa
+        self.logger.info("Step.2 Focus on textarea.")
+        self.browser.execute_script("arguments[0].focus();", text_area, prompt)
+        time.sleep(1)
+        # noqa
+        self.logger.info("Step.3 Fill in textarea.")
+        self.browser.execute_script(
+            "arguments[0].value = arguments[1];", text_area, prompt
+        )
+        time.sleep(1.5)
+        # noqa
+        self.logger.info("Step.4 Add an additional ENTER.")
+        text_area.send_keys(Keys.SHIFT + Keys.ENTER)
+        time.sleep(1.5)
+        # noqa
 
         # 等待发送按钮出现
-        self.logger.info('Step.5 Waiting for send button to appear...')
-        self.helper.wait_until_disappear(By.XPATH, self.xpath_send_button_disabled); time.sleep(1);  # noqa
+        self.logger.info("Step.5 Waiting for send button to appear...")
+        self.helper.wait_until_disappear(By.XPATH, self.xpath_send_button_disabled)
+        time.sleep(1)
+        # noqa
         text_area.send_keys(Keys.COMMAND + Keys.RETURN)
-        self.logger.info('Step.6 Message sent, waiting for response...')
+        self.logger.info("Step.6 Message sent, waiting for response...")
 
         # 检查返回值
         pass
@@ -550,7 +672,16 @@ class Register:
 
 
 class EmailMonitor:
-    def __init__(self, server, port, username, password, folder, specified_sender, specified_receiver):
+    def __init__(
+        self,
+        server,
+        port,
+        username,
+        password,
+        folder,
+        specified_sender,
+        specified_receiver,
+    ):
         self.server = server
         self.port = port
         self.username = username
@@ -580,21 +711,23 @@ class EmailMonitor:
                 if content_type == "text/html":
                     html_content = part.get_payload(decode=True).decode()
 
-                    pattern = r'<a href="(.*?)".*?>[\s\S]*?Verify email address[\s\S]*?<\/a>'
+                    pattern = (
+                        r'<a href="(.*?)".*?>[\s\S]*?Verify email address[\s\S]*?<\/a>'
+                    )
                     result = re.search(pattern, html_content)
                     if result:
                         link = result.group(1)
                         self.logger.info(f'Account: {msg["To"]}')
-                        self.logger.info(f'Found verify link: {link}')
+                        self.logger.info(f"Found verify link: {link}")
                         return link
                     else:
-                        self.logger.error('Verify link does not exist!')
+                        self.logger.error("Verify link does not exist!")
                         return None
             else:
-                self.logger.error(f'The text/html part not appears in this mail!')
+                self.logger.error(f"The text/html part not appears in this mail!")
                 return None
         else:
-            self.logger.error('The format of mail is wrong. Please check!')
+            self.logger.error("The format of mail is wrong. Please check!")
             return None
 
     def check_new_mail(self):
@@ -616,44 +749,51 @@ class EmailMonitor:
                     # else:
                     #     self.logger.warning('列出所有Folders失败！')
 
-                self.logger.info(f'Selecting folder: {self.folder}')
+                self.logger.info(f"Selecting folder: {self.folder}")
                 self.mail.select(self.folder)
 
                 # 搜索未读邮件
-                self.logger.info(f'Searching for unseen mails...')
+                self.logger.info(f"Searching for unseen mails...")
                 # status, messages = self.mail.search(None, f'(UNSEEN FROM "{self.specified_sender}" TO "{self.specified_receiver}")')
-                status, messages = self.mail.search(None, f'(FROM "{self.specified_sender}" TO "{self.specified_receiver}")')
-                if status != 'OK':
+                status, messages = self.mail.search(
+                    None,
+                    f'(FROM "{self.specified_sender}" TO "{self.specified_receiver}")',
+                )
+                if status != "OK":
                     self.logger.warning(f"Search failed，status: {status}")
 
                 # Get the list of email IDs
                 email_ids = messages[0].split()
-                self.logger.info(f'Found {len(email_ids)} unseen mails from OpenAI.')
+                self.logger.info(f"Found {len(email_ids)} unseen mails from OpenAI.")
 
                 # check if specific content appears
                 for num in messages[0].split():
-                    self.logger.info(f'Fetching unread mail -> {num.decode()}...')
+                    self.logger.info(f"Fetching unread mail -> {num.decode()}...")
 
                     # BUG: 使用 fetch RFC822 会将邮件标记为已读状态
-                    status, data = self.mail.fetch(num, '(RFC822)')
+                    status, data = self.mail.fetch(num, "(RFC822)")
 
-                    if status == 'OK':
+                    if status == "OK":
                         msg = e_mail.message_from_bytes(data[0][1])  # noqa
 
-                        if msg['To'] == self.specified_receiver:
+                        if msg["To"] == self.specified_receiver:
                             link = self.extract_link_from_mail(msg)
                             if link:
-                                self.logger.info(f'[bold green]Got the verification mail for {self.specified_receiver}![/bold green]')
-                                self.link_dict[msg['To']] = link
+                                self.logger.info(
+                                    f"[bold green]Got the verification mail for {self.specified_receiver}![/bold green]"
+                                )
+                                self.link_dict[msg["To"]] = link
 
                                 # 标记为已读
-                                self.mail.store(num, '+FLAGS', '\\Seen')
+                                self.mail.store(num, "+FLAGS", "\\Seen")
                         else:
                             # 标记为未读
-                            self.mail.store(num, '+FLAGS', '\\Unseen')
-                            self.logger.info(f'Verification mail for {msg["To"]} discarded.')
+                            self.mail.store(num, "+FLAGS", "\\Unseen")
+                            self.logger.info(
+                                f'Verification mail for {msg["To"]} discarded.'
+                            )
                     else:
-                        self.logger.error(f'Fetch failed for mail {num}!')
+                        self.logger.error(f"Fetch failed for mail {num}!")
 
                 self.logger.info("All emails have been checked.")
                 time.sleep(2)
@@ -684,7 +824,7 @@ class EmailMonitor:
         self.is_terminated = True
         self.logger.info("Waiting for monitoring thread to end...")
         self.thread.join()
-        self.logger.info('Monitoring thread ended.')
+        self.logger.info("Monitoring thread ended.")
 
     def get_link(self, account):
         present = self.link_dict.get(account, None)
@@ -700,9 +840,7 @@ class EmailMonitor:
 
 
 class FunCaptchaSolver:
-
-    def __init__(self, client_key,browser):
-
+    def __init__(self, client_key, browser):
         # 配置 Capsolver ClientKey
         self.client_key = client_key
 
@@ -714,21 +852,24 @@ class FunCaptchaSolver:
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def solve(self, question_type: str):
-
         while True:
-            self.logger.info('Waiting for puzzle button appears...')
+            self.logger.info("Waiting for puzzle button appears...")
             self.switch_to_puzzle_frame()
             time.sleep(2)
 
-            puzzle_button = self.helper.sleepy_find_element(By.XPATH, "//button[text()='开始拼图' or text()='再次尝试']")
+            puzzle_button = self.helper.sleepy_find_element(
+                By.XPATH, "//button[text()='开始拼图' or text()='再次尝试']"
+            )
             puzzle_button.click()
 
-            self.logger.info('Puzzle button clicked.')
+            self.logger.info("Puzzle button clicked.")
 
             previous_stage, (current_stage, total_stage) = None, self.get_stage_info()
 
             for i in range(total_stage):
-                self.logger.info(f'({current_stage}/{total_stage}) [bold red]Solving puzzle...[/bold red]')
+                self.logger.info(
+                    f"({current_stage}/{total_stage}) [bold red]Solving puzzle...[/bold red]"
+                )
 
                 # 是否是从头开始、或是已到达下一轮
                 while current_stage == previous_stage:
@@ -742,50 +883,63 @@ class FunCaptchaSolver:
                 self.submit_puzzle()
 
             if not self.try_again():
-                self.logger.info(f'[bold green]Solve successful![/bold green]')
+                self.logger.info(f"[bold green]Solve successful![/bold green]")
                 self.switch_to_default_frame()
                 break
 
-            self.logger.warning(f'Solve failed. Try again!')
+            self.logger.warning(f"Solve failed. Try again!")
 
     def switch_to_puzzle_frame(self):
-        self.logger.debug('Switching to puzzle frame...')
+        self.logger.debug("Switching to puzzle frame...")
 
         self.browser.switch_to.default_content()
 
-        verification_frame = self.helper.sleepy_find_element(By.XPATH, '//iframe[@title="Verification challenge"]')
+        verification_frame = self.helper.sleepy_find_element(
+            By.XPATH, '//iframe[@title="Verification challenge"]'
+        )
         self.browser.switch_to.frame(verification_frame)
 
-        game_frame = self.helper.sleepy_find_element(By.XPATH, '//iframe[@id="game-core-frame"]')
+        game_frame = self.helper.sleepy_find_element(
+            By.XPATH, '//iframe[@id="game-core-frame"]'
+        )
         self.browser.switch_to.frame(game_frame)
 
-        self.logger.debug('Switched to puzzle frame.')
+        self.logger.debug("Switched to puzzle frame.")
 
     def switch_to_default_frame(self):
-        self.logger.debug('Switching to default frame...')
+        self.logger.debug("Switching to default frame...")
 
         self.browser.switch_to.default_content()
 
-        self.logger.debug('Switched to default frame.')
+        self.logger.debug("Switched to default frame.")
 
     def has_next_puzzle(self):
-        self.logger.info('Detecting if has next puzzle...')
+        self.logger.info("Detecting if has next puzzle...")
 
-        submit_button = self.helper.sleepy_find_element(By.XPATH, "//button[text()='提交']", attempt_count=10, fail_ok=True)
+        submit_button = self.helper.sleepy_find_element(
+            By.XPATH, "//button[text()='提交']", attempt_count=10, fail_ok=True
+        )
 
         if submit_button:
-            self.logger.info('Had next puzzle!')
+            self.logger.info("Had next puzzle!")
             return True
         else:
-            self.logger.info('Next puzzle does not appear in 10s.')
+            self.logger.info("Next puzzle does not appear in 10s.")
             return False
 
-    @retry(tries=6, delay=2, backoff=2, exceptions=(Exceptions.StaleElementReferenceException,))
+    @retry(
+        tries=6,
+        delay=2,
+        backoff=2,
+        exceptions=(Exceptions.StaleElementReferenceException,),
+    )
     def get_stage_info(self):
-        self.logger.info('Detecting current stage information...')
+        self.logger.info("Detecting current stage information...")
 
-        stage_label = self.helper.sleepy_find_element(By.XPATH, "//h2[contains(@class, 'text')]/span[@role='text']")
-        self.logger.info(f'Stage: [yellow]{stage_label.text}[/yellow]')
+        stage_label = self.helper.sleepy_find_element(
+            By.XPATH, "//h2[contains(@class, 'text')]/span[@role='text']"
+        )
+        self.logger.info(f"Stage: [yellow]{stage_label.text}[/yellow]")
 
         match = re.search(r"\((\d+)，共 (\d+) 项\)", stage_label.text)
 
@@ -797,7 +951,7 @@ class FunCaptchaSolver:
         raise ValueError(stage_label.text)
 
     def try_again(self):
-        self.logger.info('Detecting if has try again button...')
+        self.logger.info("Detecting if has try again button...")
 
         # 切回 default_frame
         self.switch_to_default_frame()
@@ -805,46 +959,52 @@ class FunCaptchaSolver:
         # 再切回 puzzle_frmae
         self.switch_to_puzzle_frame()
 
-        try_again_button = self.helper.sleepy_find_element(By.XPATH, "//button[text()='再次尝试']", attempt_count=3, fail_ok=True)
+        try_again_button = self.helper.sleepy_find_element(
+            By.XPATH, "//button[text()='再次尝试']", attempt_count=3, fail_ok=True
+        )
 
         if try_again_button:
-            self.logger.info('Need to try again!')
-            #try_again_button.click()
+            self.logger.info("Need to try again!")
+            # try_again_button.click()
             return True
         else:
-            self.logger.info('Try again button does not appear in 10s.')
+            self.logger.info("Try again button does not appear in 10s.")
             return False
 
     def start_puzzle(self):
-        self.logger.info('Starting puzzle...')
+        self.logger.info("Starting puzzle...")
 
-        start_puzzle = self.helper.sleepy_find_element(By.XPATH, "//button[text()='开始拼图']")
+        start_puzzle = self.helper.sleepy_find_element(
+            By.XPATH, "//button[text()='开始拼图']"
+        )
         start_puzzle.click()
 
-        self.logger.info('Puzzle started!')
+        self.logger.info("Puzzle started!")
 
     def submit_puzzle(self):
-        self.logger.info('Submitting puzzle...')
+        self.logger.info("Submitting puzzle...")
 
         submit_puzzle = self.browser.find_element(By.XPATH, "//button[text()='提交']")
         submit_puzzle.click()
 
-        self.logger.info('Puzzle submitted!')
+        self.logger.info("Puzzle submitted!")
 
     def switch_to_position(self, target):
-        self.logger.info(f'Switching to target position: {target}')
+        self.logger.info(f"Switching to target position: {target}")
 
         while (curr_position := self.find_active_child_index()) != target:
-            self.logger.info(f'Current position: {curr_position+1}, moving...')
+            self.logger.info(f"Current position: {curr_position+1}, moving...")
             self.right_arrow()
             time.sleep(1)
 
-        self.logger.info('Switched to target position!')
+        self.logger.info("Switched to target position!")
 
     def right_arrow(self):
-        self.logger.debug('Clicking right arrow...')
+        self.logger.debug("Clicking right arrow...")
 
-        right_arrow = self.browser.find_element(By.XPATH, '//a[@role="button" and contains(@class, "right-arrow")]')
+        right_arrow = self.browser.find_element(
+            By.XPATH, '//a[@role="button" and contains(@class, "right-arrow")]'
+        )
         right_arrow.click()
 
     def get_image_aspect_ratio(self, base64_string: str) -> Tuple[int, int]:
@@ -872,16 +1032,20 @@ class FunCaptchaSolver:
 
     @retry(tries=7, delay=1, backoff=2, exceptions=(ValueError, AttributeError))
     def get_puzzle_image(self):
-
         # 定位到img元素
-        image_element = self.helper.sleepy_find_element(By.XPATH, "//div[contains(@class, 'answer-frame')]/div[contains(@class, 'box')]/img")
+        image_element = self.helper.sleepy_find_element(
+            By.XPATH,
+            "//div[contains(@class, 'answer-frame')]/div[contains(@class, 'box')]/img",
+        )
 
         # 获取style属性
         style_attribute = image_element.get_attribute("style")
 
         # 提取background-image的URL
-        image_url = re.search(r"background-image: url\((.*?)\)", style_attribute).group(1)[6:][:-1]
-        self.logger.info(f'Extracted puzzle image url: {image_url}')
+        image_url = re.search(r"background-image: url\((.*?)\)", style_attribute).group(
+            1
+        )[6:][:-1]
+        self.logger.info(f"Extracted puzzle image url: {image_url}")
 
         # 构建并执行JavaScript
         script = """
@@ -899,50 +1063,56 @@ class FunCaptchaSolver:
                 callback(''); // 发生错误时也要调用callback
             });
         """
-        image_data = self.browser.execute_async_script(script, 'blob:' + image_url).split('image/jpeg;base64,')[-1]
+        image_data = self.browser.execute_async_script(
+            script, "blob:" + image_url
+        ).split("image/jpeg;base64,")[-1]
 
         if len(image_data) < 1024:
-            self.logger.error(f'Got invalid image_data, retrying...')
+            self.logger.error(f"Got invalid image_data, retrying...")
             raise ValueError
 
-        self.logger.info('Successfully extracted puzzle image data!')
+        self.logger.info("Successfully extracted puzzle image data!")
 
         self.save_base64_image(image_data)
 
         return image_data
-    
-    def save_base64_image(self, base64_data, folder='./solved'):
 
+    def save_base64_image(self, base64_data, folder="./solved"):
         try:
             # 确保文件夹存在
             if not os.path.exists(folder):
                 os.makedirs(folder)
-    
+
             # 生成文件名：当前时间 + 8位随机字符串
-            current_time = datetime.now().strftime('%Y%m%d%H%M%S')
-            random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+            current_time = datetime.now().strftime("%Y%m%d%H%M%S")
+            random_str = "".join(
+                random.choices(string.ascii_letters + string.digits, k=8)
+            )
             filename = f"{current_time}_{random_str}.jpg"
-    
+
             # 解码Base64图片数据
             image_data = base64.b64decode(base64_data)
-    
+
             # 写入文件
-            with open(os.path.join(folder, filename), 'wb') as file:
+            with open(os.path.join(folder, filename), "wb") as file:
                 file.write(image_data)
-    
+
             self.logger.info(f"Captcha image saved as {filename}")
-    
+
         except base64.binascii.Error:
-            self.logger.info("Error: The provided string is not valid Base64-encoded data.")
+            self.logger.info(
+                "Error: The provided string is not valid Base64-encoded data."
+            )
         except IOError as e:
             self.logger.info(f"IO Error: {e}")
         except Exception as e:
             self.logger.info(f"An unexpected error occurred: {e}")
 
     def find_active_child_index(self):
-
         # 定位父标签
-        parent_element = self.browser.find_element(By.XPATH, '//div[contains(@class, "pip-container")]')
+        parent_element = self.browser.find_element(
+            By.XPATH, '//div[contains(@class, "pip-container")]'
+        )
         # 获取所有子标签
         children = parent_element.find_elements(By.XPATH, "./*")
 
@@ -952,37 +1122,42 @@ class FunCaptchaSolver:
                 return index
         return None
 
-    @retry(tries=5, delay=1, backoff=2, exceptions=(RequestException, json.JSONDecodeError, ValueError, KeyError))
+    @retry(
+        tries=5,
+        delay=1,
+        backoff=2,
+        exceptions=(RequestException, json.JSONDecodeError, ValueError, KeyError),
+    )
     def solve_puzzle(self, question_type: str, base64_str: str):
-        self.logger.info(f'Solving puzzle...')
+        self.logger.info(f"Solving puzzle...")
 
-        url = 'https://api.capsolver.com/createTask'
+        url = "https://api.capsolver.com/createTask"
 
         payload = {
             "clientKey": self.client_key,
             "appId": "0D62B64B-B22E-4F8E-AA10-08C390CE1103",
             "task": {
-                "websiteURL": pandora_next_website,
-                "websiteKey": '0655BC92-82E1-43D9-B32E-9DF9B01AF50C',
+                "websiteURL": oopenai_signup_website,
+                "websiteKey": "0655BC92-82E1-43D9-B32E-9DF9B01AF50C",
                 "type": "FunCaptchaClassification",
-                "images": [
-                    base64_str
-                ],
+                "images": [base64_str],
                 # "module": "train_coorinatesmatch",
-                "question": question_type
-            }
+                "question": question_type,
+            },
         }
 
         res = requests.post(url, json=payload)
         json_content = res.json()
 
-        if 'solution' not in json_content:
-            self.logger.error(f'`solution` not in response! json_content: {json_content}')
-            raise KeyError('solution not found')
+        if "solution" not in json_content:
+            self.logger.error(
+                f"`solution` not in response! json_content: {json_content}"
+            )
+            raise KeyError("solution not found")
 
         self.logger.info(f'Puzzle solved. Solution: {res.json()["solution"]}')
 
-        return res.json()['solution']['objects'][0]
+        return res.json()["solution"]["objects"][0]
 
 
 class SeleniumDriverHelper:
@@ -991,14 +1166,20 @@ class SeleniumDriverHelper:
     """
 
     def __init__(self, driver):
-
         # 配置浏览器 driver
         self.browser = driver
 
         # 配置日志
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def sleepy_find_element(self, by, query, attempt_count: int = 30, sleep_duration: int = 3, fail_ok: bool = False):
+    def sleepy_find_element(
+        self,
+        by,
+        query,
+        attempt_count: int = 30,
+        sleep_duration: int = 3,
+        fail_ok: bool = False,
+    ):
         """
         Finds the web element using the locator and query.
 
@@ -1018,16 +1199,16 @@ class SeleniumDriverHelper:
             item = self.browser.find_elements(by, query)
             if len(item) > 0:
                 item = item[0]
-                self.logger.debug(f'Element {query} has found')
+                self.logger.debug(f"Element {query} has found")
                 break
-            self.logger.debug(f'Element {query} is not present, attempt: {_count+1}')
+            self.logger.debug(f"Element {query} is not present, attempt: {_count+1}")
             time.sleep(sleep_duration)
         else:
             if fail_ok:
-                self.logger.debug(f'Element {query} is not found.')
+                self.logger.debug(f"Element {query} is not found.")
                 return None
-            self.logger.error(f'Element {query} is not found.')
-            raise Exceptions.NoSuchElementException(f'Element {query} is not found.')
+            self.logger.error(f"Element {query} is not found.")
+            raise Exceptions.NoSuchElementException(f"Element {query} is not found.")
         return item
 
     def wait_until_disappear(self, by, query, timeout_duration=60):
@@ -1046,17 +1227,14 @@ class SeleniumDriverHelper:
         Returns:
             None
         """
-        self.logger.debug(f'Waiting element {query} to disappear.')
+        self.logger.debug(f"Waiting element {query} to disappear.")
         try:
-            WebDriverWait(
-                self.browser,
-                timeout_duration
-            ).until_not(
+            WebDriverWait(self.browser, timeout_duration).until_not(
                 EC.presence_of_element_located((by, query))  # noqa
             )
-            self.logger.debug(f'Element {query} disappeared.')
+            self.logger.debug(f"Element {query} disappeared.")
         except Exceptions.TimeoutException:
-            self.logger.debug(f'Element {query} still here, something is wrong.')
+            self.logger.debug(f"Element {query} still here, something is wrong.")
             raise
         return
 
@@ -1076,17 +1254,16 @@ class SeleniumDriverHelper:
         Returns:
             None
         """
-        self.logger.debug(f'Waiting for element {query} to appear.')
+        self.logger.debug(f"Waiting for element {query} to appear.")
         try:
-            WebDriverWait(
-                self.browser,
-                timeout_duration
-            ).until(
+            WebDriverWait(self.browser, timeout_duration).until(
                 EC.presence_of_element_located((by, query))  # noqa
             )
-            self.logger.debug(f'Element {query} appeared.')
+            self.logger.debug(f"Element {query} appeared.")
         except Exceptions.TimeoutException:
-            self.logger.error(f'Element {query} did not appear within {timeout_duration} seconds.')
+            self.logger.error(
+                f"Element {query} did not appear within {timeout_duration} seconds."
+            )
             raise
         return
 
@@ -1104,14 +1281,17 @@ class SeleniumDriverHelper:
         dom_element = self.browser.find_elements(by, query)
         if not dom_element:
             if not fail_ok:
-                self.logger.error(f'{query} is not located. Please raise an issue with verbose=True')
+                self.logger.error(
+                    f"{query} is not located. Please raise an issue with verbose=True"
+                )
             return None
 
-        self.logger.debug(f'{query} is located.')
+        self.logger.debug(f"{query} is located.")
         if return_elements:
             return dom_element
         else:
             return dom_element[0]
+
 
 def generate_random_birthday():
     current_year = datetime.now().year
@@ -1120,99 +1300,89 @@ def generate_random_birthday():
     return birth_date.strftime("%d%m%Y")
 
 
-if __name__ == '__main__':
-   
+def get_CF_5s_result(link):
+    resp_json = get_result(link, proxy=proxy)
+
+    if resp_json.get("errorId") == 1:
+        log.error(f"任务失败: 错误原因：{resp_json['errorDescription']}")
+        return False
+
+    elif resp_json["errorId"] == 0 and resp_json["status"] == "ready":
+        log.info(f"任务结果: {resp_json}")
+        cf_clearance = resp_json["solution"]["cookies"]["cf_clearance"]
+        if cf_clearance:
+            return True
+    else:
+        return False
+
+
+if __name__ == "__main__":
     # 模拟注册类
     register = Register(
-        pandora_next_website=pandora_next_website,
+        oopenai_signup_website=oopenai_signup_website,
         client_key=client_key,
-        headless=headless_browser
+        headless=headless_browser,
     )
-    time.sleep(3)
+    # time.sleep(1)
 
-    # 通过给定邮箱后缀生成账号密码
+    # # 通过给定邮箱后缀生成账号密码
     email, password = register.generate_account_information(account_postfix)
 
     # # 输入邮箱并点击继续按钮
-    register.input_email_continue(email)
-    # # 输入密码并点击继续按钮
-    register.input_password_continue(password)
+    # register.input_email_continue(email)
+    # # # # 输入密码并点击继续按钮
+    # register.input_password_continue(password)
 
-    # 进行邮件监测
-    monitor = EmailMonitor(
-        server=IMAP_server,
-        port=IMAP_port,
-        username=email_username,
-        password=email_password,
-        folder=email_folder,
-        specified_sender='noreply@tm.openai.com',
-        specified_receiver=email
-    )
-    # start to monitor mails
-    monitor.start_monitoring()
+    # # 进行邮件监测
+    # monitor = EmailMonitor(
+    #     server=IMAP_server,
+    #     port=IMAP_port,
+    #     username=email_username,
+    #     password=email_password,
+    #     folder=email_folder,
+    #     specified_sender="noreply@tm.openai.com",
+    #     specified_receiver=email,
+    # )
+    # # start to monitor mails
+    # monitor.start_monitoring()
 
-    # 打开一个新的标签页
-    # register.browser.execute_script("window.open('about:blank');")
+    # # 打开一个新的标签页
+    # # register.browser.execute_script("window.open('about:blank');")
 
-    # 切换到新的标签页
-    # register.browser.switch_to.window(register.browser.window_handles[-1])
+    # # 切换到新的标签页
+    # # register.browser.switch_to.window(register.browser.window_handles[-1])
 
-    # 开始监听邮件
-    count = 0
-    while (link := monitor.get_link(email)) is None and count < 35:
-        count += 1
-        log.info(f'账号[{email}]认证链接仍不存在，等待中...({count})')
-        time.sleep(3)
+    # # 开始监听邮件
+    # count = 0
+    # while (link := monitor.get_link(email)) is None and count < 35:
+    #     count += 1
+    #     log.info(f"账号[{email}]认证链接仍不存在，等待中...({count})")
+    #     time.sleep(3)
 
-    if link:
-        log.info(f'已获取到账号[{email}]的认证链接！')
-    else:
-        log.critical(f'邮箱获取失败！')
-        exit(-1)
+    # if link:
+    #     log.info(f"已获取到账号[{email}]的认证链接！")
+    # else:
+    #     log.critical(f"邮箱获取失败！")
+    #     exit(-1)
 
-    # 结束邮件监测
-    monitor.end_monitoring()
+    # # 结束邮件监测
+    # monitor.end_monitoring()
 
-
-    # task = get_result(link, proxy=proxy)
-    # if not task.get("solution"):
-    #     print("任务失败", task)
-    #     exit()
-        
-    # solution = task.get("solution")
-    # # headers = {
-    # #     'User-Agent': solution.get("user_agent")
-    # # }
-
-    # print("Ua", solution.get("user_agent"))
-    
-    # cookies = solution.get("cookies")
-    # print("Cookies", cookies)
-    # ua= solution.get("user_agent")
-    # register.browser.add_cookie(cookies)
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.3"
-    register.browser.options.add_argument(f"user-agent={ua}")
-    cookies_dict = {"PHPSESSID": "sgn8agalekrc2scq75p92rsrut", "cf_chl_3": "b3aad667e65ad59", "cf_clearance": "hwlQ8foNZVdX3.DeCwwQrLezOeA98AtEVGfsRI6pgQ0-1705935558-1-AZXGjpv/jNt63iZkeqwrkiZQ0yLy1VDA/JecREeYMDgrbfMNpixhZY95yeMhC8rliMvx6bOqXvUadXptHJy40wE=", "did": "s%3Av0%3Ad89a0890-b936-11ee-9dfc-03e05c3e86b2.ymPokCG%2BgzArMQz5ajIRy%2BKO7hFf2F5nm0aZRFiHC5c", "auth0": "s%3Av1.gadzZXNzaW9ugqZoYW5kbGXEQCH7i6uRdIuxu1e4rmVHHmzCQdiIzxSf4Lo2b4pNFnvLlxibPU4wP_EY7saQxAo5pSkD0gWGLQ4aiD7phNlvEw-mY29va2llg6dleHBpcmVz1__V3IkAZbJ3Uq5vcmlnaW5hbE1heEFnZc4PcxQAqHNhbWVTaXRlpG5vbmU.WYqFfG5FsqepMq%2FyZWU%2BMZiV3sJczy7gSd%2Bj8Vk2NVg", "did_compat": "s%3Av0%3Ad89a0890-b936-11ee-9dfc-03e05c3e86b2.ymPokCG%2BgzArMQz5ajIRy%2BKO7hFf2F5nm0aZRFiHC5c", "auth0_compat": "s%3Av1.gadzZXNzaW9ugqZoYW5kbGXEQCH7i6uRdIuxu1e4rmVHHmzCQdiIzxSf4Lo2b4pNFnvLlxibPU4wP_EY7saQxAo5pSkD0gWGLQ4aiD7phNlvEw-mY29va2llg6dleHBpcmVz1__V3IkAZbJ3Uq5vcmlnaW5hbE1heEFnZc4PcxQAqHNhbWVTaXRlpG5vbmU.WYqFfG5FsqepMq%2FyZWU%2BMZiV3sJczy7gSd%2Bj8Vk2NVg", "__cf_bm": "rcCVYDGkV6gM4FKdlxC15kHjYq8fVHfvZC459AvrWcw-1705935570-1-Aeye8ovlRcslifEfB8Bdc95sQI1/q+0lEcerK2btqkhCZiyWH+/0UGyFTlS7QpLE69qQnk3RCIBRky0vezZ/eCY=", "_cfuvid": "dtZ4rG01Uga91tCtRnC74eF6Ec9myH.YmJRSgVA6VMI-1705935570957-0-604800000"}
-    for name, value in cookies_dict.items():
-        cookie = {'name': name, 'value': value}
-        register.browser.add_cookie(cookie)
-
-
-    # register.browser.get('https://mandrillapp.com/track/click')
-
-
-    # register.browser.add_cookie(cookies)
-    print("添加了cookie")
-
-    register.browser.options.add_argument(f"--proxy-server={proxy}")
-    time.sleep(5)
     # link = "https://mandrillapp.com/track/click/31165340/auth0.openai.com?p=eyJzIjoiOUxrWEJaQW96Mjg3ZnFZS0NWdGtLSGVLQXlFIiwidiI6MSwicCI6IntcInVcIjozMTE2NTM0MCxcInZcIjoxLFwidXJsXCI6XCJodHRwczpcXFwvXFxcL2F1dGgwLm9wZW5haS5jb21cXFwvdVxcXC9lbWFpbC12ZXJpZmljYXRpb24_dGlja2V0PUZtYzJLOEx6MGxsekxwUWpmZUtSSGVkbWdxYVl0N2dPI1wiLFwiaWRcIjpcIjgzMGUwNjM1YjY5ZTQ0MDg5ZDM3NWVjZGM5MTVlNDA1XCIsXCJ1cmxfaWRzXCI6W1wiMWM3OTUyMjNiMmQ0YmUwMjBmZDJhNTBmMmM5YzQxZjEwMThlNDU0Y1wiXX0ifQ"
+    # res = get_CF_5s_result(link)
+    # if not res:
+    #     exit(-1)
+
     # 访问一个网址
-    register.browser.get(link)
+    register.browser.get(oopenai_sigin_website)
 
-    time.sleep(5)
-    register.input_name_birthday_continue(email.split('@')[0])
+    # time.sleep(2)
 
+    register.input_username_continue(email)
+    # time.sleep(1)
+    register.input_password_continue2(password)
+    # time.sleep(1)
+    register.input_name_birthday_continue(email.split("@")[0])
 
     # # 填写认证链接
     # register.input_verify_link(link)
@@ -1241,4 +1411,3 @@ if __name__ == '__main__':
     # 关闭
     # register.browser.close()
     # register.browser.quit()
-
